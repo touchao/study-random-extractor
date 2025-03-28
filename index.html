@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>학습기록 랜덤 추출기</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #37352f;
+            background-color: #ffffff;
+        }
+        .container {
+            border: 1px solid #e6e6e6;
+            border-radius: 4px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+        .input-group {
+            margin-bottom: 16px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+        input[type="date"], textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #e6e6e6;
+            border-radius: 3px;
+            font-size: 14px;
+        }
+        textarea {
+            height: 120px;
+            resize: vertical;
+        }
+        button {
+            background-color: #2382de;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #1a6cb3;
+        }
+        .study-records {
+            margin-top: 20px;
+        }
+        .record-item {
+            border-left: 3px solid #2382de;
+            padding: 8px 16px;
+            margin-bottom: 16px;
+            background-color: #f7f7f7;
+        }
+        .record-date {
+            font-weight: 600;
+            margin-bottom: 4px;
+            font-size: 14px;
+            color: #2382de;
+        }
+        .record-content {
+            white-space: pre-wrap;
+        }
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+            margin-left: 10px;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: #2382de;
+        }
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+        .switch-label {
+            vertical-align: middle;
+        }
+        .no-records {
+            padding: 16px;
+            text-align: center;
+            color: #666;
+            background-color: #f7f7f7;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>학습기록 랜덤 추출기</h1>
+        
+        <div class="input-group">
+            <label for="start-date">시작 날짜</label>
+            <input type="date" id="start-date">
+        </div>
+        
+        <div class="input-group">
+            <label for="end-date">종료 날짜</label>
+            <input type="date" id="end-date">
+        </div>
+        
+        <div class="input-group">
+            <label for="records">학습 기록 (JSON 형식으로 입력)</label>
+            <textarea id="records" placeholder='[
+  {"date": "2025-03-15", "content": "리액트 훅 학습: useState, useEffect 사용법"},
+  {"date": "2025-03-16", "content": "CSS Grid 레이아웃 학습"},
+  {"date": "2025-03-18", "content": "알고리즘: 다익스트라 알고리즘 구현"}
+]'></textarea>
+        </div>
+        
+        <div class="input-group">
+            <label for="num-records">추출할 기록 수</label>
+            <input type="number" id="num-records" min="1" value="1">
+        </div>
+        
+        <div>
+            <button id="extract-btn">랜덤 추출</button>
+            <span class="switch-label">자동 변경:</span>
+            <label class="toggle-switch">
+                <input type="checkbox" id="auto-toggle">
+                <span class="slider"></span>
+            </label>
+        </div>
+        
+        <div class="study-records" id="result-container">
+            <div class="no-records">추출된 기록이 없습니다. 버튼을 눌러 기록을 추출하세요.</div>
+        </div>
+    </div>
+
+    <script>
+        // 오늘 날짜를 기본값으로 설정
+        const today = new Date();
+        const formatDate = (date) => {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+        
+        // 30일 전 날짜 계산
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(today.getDate() - 30);
+        
+        // 날짜 입력 초기화
+        document.getElementById('end-date').value = formatDate(today);
+        document.getElementById('start-date').value = formatDate(thirtyDaysAgo);
+        
+        // 자동 변경 타이머 변수
+        let autoChangeTimer = null;
+        
+        // 토글 이벤트 처리
+        document.getElementById('auto-toggle').addEventListener('change', function() {
+            if (this.checked) {
+                // 5초마다 자동 변경
+                autoChangeTimer = setInterval(extractRandomRecords, 5000);
+            } else {
+                // 자동 변경 중지
+                clearInterval(autoChangeTimer);
+            }
+        });
+        
+        // 랜덤 추출 버튼 이벤트
+        document.getElementById('extract-btn').addEventListener('click', extractRandomRecords);
+        
+        // 랜덤 추출 함수
+        function extractRandomRecords() {
+            const startDate = document.getElementById('start-date').value;
+            const endDate = document.getElementById('end-date').value;
+            const numRecords = parseInt(document.getElementById('num-records').value) || 1;
+            
+            try {
+                // JSON 데이터 파싱
+                const recordsText = document.getElementById('records').value;
+                let records = JSON.parse(recordsText);
+                
+                // 날짜 필터링
+                const filteredRecords = records.filter(record => {
+                    return record.date >= startDate && record.date <= endDate;
+                });
+                
+                if (filteredRecords.length === 0) {
+                    document.getElementById('result-container').innerHTML = 
+                        '<div class="no-records">선택한 기간 내 기록이 없습니다.</div>';
+                    return;
+                }
+                
+                // 랜덤 추출
+                const selectedRecords = [];
+                const actualNumToExtract = Math.min(numRecords, filteredRecords.length);
+                
+                // 랜덤 인덱스 배열 생성 (중복 방지)
+                const availableIndices = Array.from({ length: filteredRecords.length }, (_, i) => i);
+                
+                for (let i = 0; i < actualNumToExtract; i++) {
+                    const randomIndex = Math.floor(Math.random() * availableIndices.length);
+                    const recordIndex = availableIndices[randomIndex];
+                    
+                    // 사용한 인덱스 제거
+                    availableIndices.splice(randomIndex, 1);
+                    
+                    selectedRecords.push(filteredRecords[recordIndex]);
+                }
+                
+                // 결과 표시
+                displayRecords(selectedRecords);
+                
+            } catch (error) {
+                document.getElementById('result-container').innerHTML = 
+                    `<div class="no-records">오류가 발생했습니다: ${error.message}</div>`;
+            }
+        }
+        
+        // 결과 표시 함수
+        function displayRecords(records) {
+            const resultContainer = document.getElementById('result-container');
+            
+            if (records.length === 0) {
+                resultContainer.innerHTML = '<div class="no-records">추출된 기록이 없습니다.</div>';
+                return;
+            }
+            
+            let html = '';
+            records.forEach(record => {
+                const dateParts = record.date.split('-');
+                const formattedDate = `${dateParts[0]}년 ${dateParts[1]}월 ${dateParts[2]}일`;
+                
+                html += `
+                    <div class="record-item">
+                        <div class="record-date">${formattedDate}</div>
+                        <div class="record-content">${record.content}</div>
+                    </div>
+                `;
+            });
+            
+            resultContainer.innerHTML = html;
+        }
+    </script>
+</body>
+</html>
